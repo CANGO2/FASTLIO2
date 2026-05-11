@@ -37,7 +37,7 @@ def generate_launch_description():
         period=4.0,
         actions=[
             ExecuteProcess(
-                cmd=['python3', '/home/nuc/initialpose_bridge.py'],
+                cmd=['python3', '/home/nuc/ros2_ws/src/FASTLIO2/localizer/src/initialpose_bridge.py'],
                 output='screen'
             )
         ]
