@@ -52,7 +52,7 @@ pcl::PointCloud<pcl::PointXYZINormal>::Ptr Utils::velo2PCL(
         output->push_back(p);
     }
 
-    std::cout << "Output point cloud size: " << output->size() << std::endl;
+    // std::cout << "Output point cloud size: " << output->size() << std::endl;
     return output;
 }
 

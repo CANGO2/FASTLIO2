@@ -3,9 +3,14 @@ lidar_topic: /points_raw
 body_frame: base_link
 world_frame: odom  # map
 print_time_cost: false
+
+fix_output_z: true
+fixed_output_z: 0.0
+planar_output: true
+
 lidar_filter_num: 6
 lidar_min_range: 0.5
-lidar_max_range: 30.0
+lidar_max_range: 15.0
 scan_resolution: 0.15
 map_resolution: 0.3
 cube_len: 300

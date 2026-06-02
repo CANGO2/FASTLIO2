@@ -71,17 +71,33 @@ bool ICPLocalizer::align(M4F &guess)
     if (m_refine_tgt->size() == 0 || m_rough_tgt->size() == 0)
         return false;
     m_rough_icp.setMaximumIterations(m_config.rough_max_iteration);
+    m_rough_icp.setMaxCorrespondenceDistance(m_config.rough_max_correspondence_distance);
     m_rough_icp.setInputSource(m_rough_inp);
     m_rough_icp.setInputTarget(m_rough_tgt);
     m_rough_icp.align(*aligned_cloud, guess);
-    if (!m_rough_icp.hasConverged() || m_rough_icp.getFitnessScore() > m_config.rough_score_thresh)
+    double rough_score = m_rough_icp.getFitnessScore();
+    if (!m_rough_icp.hasConverged() || rough_score > m_config.rough_score_thresh)
+    {
+        std::cerr << "Rough ICP rejected: converged=" << m_rough_icp.hasConverged()
+                  << " score=" << rough_score
+                  << " thresh=" << m_config.rough_score_thresh << std::endl;
         return false;
+    }
     m_refine_icp.setMaximumIterations(m_config.refine_max_iteration);
+    m_refine_icp.setMaxCorrespondenceDistance(m_config.refine_max_correspondence_distance);
     m_refine_icp.setInputSource(m_refine_inp);
     m_refine_icp.setInputTarget(m_refine_tgt);
     m_refine_icp.align(*aligned_cloud, m_rough_icp.getFinalTransformation());
-    if (!m_refine_icp.hasConverged() || m_refine_icp.getFitnessScore() > m_config.refine_score_thresh)
+    double refine_score = m_refine_icp.getFitnessScore();
+    if (!m_refine_icp.hasConverged() || refine_score > m_config.refine_score_thresh)
+    {
+        std::cerr << "Refine ICP rejected: converged=" << m_refine_icp.hasConverged()
+                  << " score=" << refine_score
+                  << " thresh=" << m_config.refine_score_thresh << std::endl;
         return false;
+    }
     guess = m_refine_icp.getFinalTransformation();
+    std::cerr << "ICP accepted: rough_score=" << rough_score
+              << " refine_score=" << refine_score << std::endl;
     return true;
 }

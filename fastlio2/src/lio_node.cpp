@@ -21,6 +21,9 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <yaml-cpp/yaml.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#ifdef FASTLIO2_COMPOSITION_BUILD
+#include <rclcpp_components/register_node_macro.hpp>
+#endif
 
 using namespace std::chrono_literals;
 
@@ -31,6 +34,9 @@ struct NodeConfig
     std::string body_frame = "body";
     std::string world_frame = "lidar";
     bool print_time_cost = false;
+    bool fix_output_z = false;
+    double fixed_output_z = 0.0;
+    bool planar_output = false;
 };
 
 struct StateData
@@ -48,7 +54,8 @@ struct StateData
 class LIONode : public rclcpp::Node
 {
 public:
-    LIONode() : Node("lio_node")
+    explicit LIONode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+        : Node("lio_node", options)
     {
         RCLCPP_INFO(this->get_logger(), "LIO Node Started");
         loadParameters();
@@ -95,6 +102,9 @@ public:
         m_node_config.lidar_topic = config["lidar_topic"].as<std::string>();
         m_node_config.body_frame = config["body_frame"].as<std::string>();
         m_node_config.world_frame = config["world_frame"].as<std::string>();
+        m_node_config.fix_output_z = config["fix_output_z"] ? config["fix_output_z"].as<bool>() : false;
+        m_node_config.fixed_output_z = config["fixed_output_z"] ? config["fixed_output_z"].as<double>() : 0.0;
+        m_node_config.planar_output = config["planar_output"] ? config["planar_output"].as<bool>() : false;
         m_node_config.print_time_cost = config["print_time_cost"].as<bool>();
 
         m_builder_config.lidar_filter_num = config["lidar_filter_num"].as<int>();
@@ -238,9 +248,9 @@ public:
 
         odom.pose.pose.position.x = m_kf->x().t_wi.x();
         odom.pose.pose.position.y = m_kf->x().t_wi.y();
-        odom.pose.pose.position.z = m_kf->x().t_wi.z();
+        odom.pose.pose.position.z = outputZ(m_kf->x().t_wi.z());
 
-        Eigen::Quaterniond q(m_kf->x().r_wi);
+        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
         odom.pose.pose.orientation.x = q.x();
         odom.pose.pose.orientation.y = q.y();
         odom.pose.pose.orientation.z = q.z();
@@ -268,9 +278,9 @@ public:
 
         pose.pose.position.x = m_kf->x().t_wi.x();
         pose.pose.position.y = m_kf->x().t_wi.y();
-        pose.pose.position.z = m_kf->x().t_wi.z();
+        pose.pose.position.z = outputZ(m_kf->x().t_wi.z());
 
-        Eigen::Quaterniond q(m_kf->x().r_wi);
+        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
         pose.pose.orientation.x = q.x();
         pose.pose.orientation.y = q.y();
         pose.pose.orientation.z = q.z();
@@ -291,12 +301,12 @@ public:
         transformStamped.child_frame_id = child_frame;
         transformStamped.header.stamp = Utils::getTime(time);
 
-        Eigen::Quaterniond q(m_kf->x().r_wi);
+        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
         V3D t = m_kf->x().t_wi;
 
         transformStamped.transform.translation.x = t.x();
         transformStamped.transform.translation.y = t.y();
-        transformStamped.transform.translation.z = t.z();
+        transformStamped.transform.translation.z = outputZ(t.z());
         transformStamped.transform.rotation.x = q.x();
         transformStamped.transform.rotation.y = q.y();
         transformStamped.transform.rotation.z = q.z();
@@ -339,19 +349,19 @@ public:
             m_package.cloud,
             m_kf->x().r_il,
             m_kf->x().t_il);
-            static int frame_cnt = 0;
-            if (++frame_cnt % 10 == 0) {
-                auto r = m_kf->x().r_il;
-                auto t = m_kf->x().t_il;
-                RCLCPP_INFO(get_logger(), 
-                    "esti_il r_il: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]",
-                    r(0,0), r(0,1), r(0,2),
-                    r(1,0), r(1,1), r(1,2),
-                    r(2,0), r(2,1), r(2,2));
-                RCLCPP_INFO(get_logger(),
-                    "esti_il t_il: [%.4f, %.4f, %.4f]",
-                    t(0), t(1), t(2));
-            }
+            // static int frame_cnt = 0;
+            // if (++frame_cnt % 10 == 0) {
+            //     auto r = m_kf->x().r_il;
+            //     auto t = m_kf->x().t_il;
+            //     RCLCPP_INFO(get_logger(), 
+            //         "esti_il r_il: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]",
+            //         r(0,0), r(0,1), r(0,2),
+            //         r(1,0), r(1,1), r(1,2),
+            //         r(2,0), r(2,1), r(2,2));
+            //     RCLCPP_INFO(get_logger(),
+            //         "esti_il t_il: [%.4f, %.4f, %.4f]",
+            //         t(0), t(1), t(2));
+            // }
         publishCloud(
             m_body_cloud_pub,
             body_cloud,
@@ -391,6 +401,25 @@ public:
     }
 
 private:
+    double outputZ(double z) const
+    {
+        return m_node_config.fix_output_z ? m_node_config.fixed_output_z : z;
+    }
+
+    Eigen::Quaterniond outputQuaternion(const M3D &rotation) const
+    {
+        if (!m_node_config.planar_output)
+            return Eigen::Quaterniond(rotation);
+
+        return outputPlanarQuaternion(rotation);
+    }
+
+    Eigen::Quaterniond outputPlanarQuaternion(const M3D &rotation) const
+    {
+        const double yaw = std::atan2(rotation(1, 0), rotation(0, 0));
+        return Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+    }
+
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr m_lidar_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
 
@@ -412,6 +441,7 @@ private:
     std::shared_ptr<tf2_ros::TransformBroadcaster> m_tf_broadcaster;
 };
 
+#ifndef FASTLIO2_COMPOSITION_BUILD
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
@@ -419,3 +449,8 @@ int main(int argc, char **argv)
     rclcpp::shutdown();
     return 0;
 }
+#endif
+
+#ifdef FASTLIO2_COMPOSITION_BUILD
+RCLCPP_COMPONENTS_REGISTER_NODE(LIONode)
+#endif

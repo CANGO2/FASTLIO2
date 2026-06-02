@@ -23,6 +23,7 @@ add_definitions(-DMP_PROC_NUM=2)
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -58,8 +59,20 @@ target_link_libraries(lio_node
   ${PCL_LIBRARIES}
 )
 
+add_library(lio_node_component SHARED src/lio_node.cpp ${SRC_LIST})
+target_compile_definitions(lio_node_component PRIVATE FASTLIO2_COMPOSITION_BUILD)
+ament_target_dependencies(lio_node_component rclcpp rclcpp_components std_msgs tf2 tf2_ros nav_msgs sensor_msgs pcl_conversions geometry_msgs)
+target_link_libraries(lio_node_component
+  yaml-cpp
+  ${PCL_LIBRARIES}
+)
+rclcpp_components_register_nodes(lio_node_component "LIONode")
 
 install(TARGETS lio_node DESTINATION lib/${PROJECT_NAME})
+install(TARGETS lio_node_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin)
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY rviz DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
