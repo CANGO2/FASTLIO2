@@ -120,7 +120,7 @@ public:
 
         m_map_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("map_cloud", 10);
 
-        m_timer = this->create_wall_timer(10ms, std::bind(&LocalizerNode::timerCB, this));
+        m_timer = this->create_wall_timer(33ms, std::bind(&LocalizerNode::timerCB, this));
     }
 
     void loadParameters()

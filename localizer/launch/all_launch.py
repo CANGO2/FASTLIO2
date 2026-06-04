@@ -10,10 +10,12 @@ def generate_launch_description():
     hesai_share = get_package_share_directory("hesai_lidar")
     fastlio_share = get_package_share_directory("fastlio2")
     localizer_share = get_package_share_directory("localizer")
+    safety_share = get_package_share_directory("safety_checker")
 
     lidar_correction_file = os.path.join(hesai_share, "config", "PandarXT-16.csv")
     lio_config_path = os.path.join(fastlio_share, "config", "lio.yaml")
     localizer_config_path = os.path.join(localizer_share, "config", "localizer.yaml")
+    safety_config_path = os.path.join(safety_share, "config", "params.yml")
     rviz_cfg = os.path.join(localizer_share, "rviz", "localizer.rviz")
 
     perception_container = ComposableNodeContainer(
@@ -54,6 +56,14 @@ def generate_launch_description():
                 name="lio_node",
                 namespace="fastlio2",
                 parameters=[{"config_path": lio_config_path}],
+                extra_arguments=[{"use_intra_process_comms": True}],
+            ),
+            ComposableNode(
+                package="safety_checker",
+                plugin="ObstacleSafetyNode",
+                name="safety_checker",
+                namespace="",
+                parameters=[safety_config_path],
                 extra_arguments=[{"use_intra_process_comms": True}],
             ),
         ],

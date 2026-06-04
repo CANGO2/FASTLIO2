@@ -3,7 +3,7 @@ odom_topic: /fastlio2/lio_odom
 map_path: /home/nuc/GlobalMap2.pcd
 map_frame: map
 local_frame: odom
-update_hz: 3.0
+update_hz: 1.0
 
 enable_pose_guard: true
 max_translation_jump: 0.35
@@ -30,13 +30,13 @@ fixed_tf_z: 0.0
 fix_robot_z: true
 fixed_robot_z: 0.0
 
-rough_scan_resolution: 0.3
+rough_scan_resolution: 0.4
 rough_map_resolution: 0.3
 rough_max_iteration: 3
 rough_score_thresh: 0.15
 rough_max_correspondence_distance: 1.5
-refine_scan_resolution: 0.15
+refine_scan_resolution: 0.2
 refine_map_resolution: 0.15
-refine_max_iteration: 5
+refine_max_iteration: 3
 refine_score_thresh: 0.07
 refine_max_correspondence_distance: 0.7

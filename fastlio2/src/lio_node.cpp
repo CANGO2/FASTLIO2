@@ -368,16 +368,19 @@ public:
             m_node_config.body_frame,
             m_package.cloud_end_time);
 
-        CloudType::Ptr world_cloud = m_builder->lidar_processor()->transformCloud(
-            m_package.cloud,
-            m_builder->lidar_processor()->r_wl(),
-            m_builder->lidar_processor()->t_wl());
+        if (m_world_cloud_pub->get_subscription_count() > 0)
+        {
+            CloudType::Ptr world_cloud = m_builder->lidar_processor()->transformCloud(
+                m_package.cloud,
+                m_builder->lidar_processor()->r_wl(),
+                m_builder->lidar_processor()->t_wl());
 
-        publishCloud(
-            m_world_cloud_pub,
-            world_cloud,
-            m_node_config.world_frame,
-            m_package.cloud_end_time);
+            publishCloud(
+                m_world_cloud_pub,
+                world_cloud,
+                m_node_config.world_frame,
+                m_package.cloud_end_time);
+        }
 
         // 진짜 누적 global map publish
         // 너무 무거우니 매 프레임이 아니라 20번에 1번만 publish
