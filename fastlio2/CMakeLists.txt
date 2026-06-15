@@ -60,6 +60,9 @@ target_link_libraries(lio_node
   ${PCL_LIBRARIES}
 )
 
+add_executable(dynamic_object_filter_node src/dynamic_object_filter_node.cpp)
+ament_target_dependencies(dynamic_object_filter_node rclcpp sensor_msgs)
+
 add_library(lio_node_component SHARED src/lio_node.cpp ${SRC_LIST})
 target_compile_definitions(lio_node_component PRIVATE FASTLIO2_COMPOSITION_BUILD)
 ament_target_dependencies(lio_node_component rclcpp rclcpp_components std_msgs tf2 tf2_ros nav_msgs sensor_msgs std_srvs pcl_conversions geometry_msgs)
@@ -69,7 +72,10 @@ target_link_libraries(lio_node_component
 )
 rclcpp_components_register_nodes(lio_node_component "LIONode")
 
-install(TARGETS lio_node DESTINATION lib/${PROJECT_NAME})
+install(TARGETS
+  lio_node
+  dynamic_object_filter_node
+  DESTINATION lib/${PROJECT_NAME})
 install(TARGETS lio_node_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

@@ -19,6 +19,23 @@ def generate_launch_description():
         [
             launch_ros.actions.Node(
                 package="fastlio2",
+                executable="dynamic_object_filter_node",
+                name="dynamic_object_filter_node",
+                output="screen",
+                parameters=[
+                    {
+                        "input_topic": "/points_raw",
+                        "output_topic": "/points_raw_static",
+                        "enabled": True,
+                        "remove_min_range": 0.2,
+                        "remove_max_range": 1.5,
+                        "remove_min_z": 0.1,
+                        "remove_max_z": 1.8,
+                    }
+                ],
+            ),
+            launch_ros.actions.Node(
+                package="fastlio2",
                 namespace="fastlio2",
                 executable="lio_node",
                 name="lio_node",

@@ -10,7 +10,6 @@ Panels:
         - /PointCloud22/Topic1
         - /Map1/Topic1
         - /Path2/Topic1
-        - /MarkerArray1
       Splitter Ratio: 0.5
     Tree Height: 719
   - Class: rviz_common/Selection
@@ -232,18 +231,6 @@ Visualization Manager:
         Value: /local_costmap/costmap_updates
       Use Timestamp: false
       Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /cango/sound_trigger_zones
-      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -305,10 +292,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.5047963857650757
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.5804153680801392
+      Yaw: 1.5704153776168823
     Saved: ~
 Window Geometry:
   Displays:

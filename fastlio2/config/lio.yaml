@@ -1,5 +1,5 @@
 imu_topic: /go2/imu
-lidar_topic: /points_raw
+lidar_topic: /points_raw_static
 body_frame: base_link
 world_frame: odom  # map
 print_time_cost: false

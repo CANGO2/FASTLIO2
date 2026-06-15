@@ -121,10 +121,29 @@ def generate_launch_description():
         condition=IfCondition(use_initialpose_bridge),
     )
 
+    dynamic_object_filter_node = Node(
+        package="fastlio2",
+        executable="dynamic_object_filter_node",
+        name="dynamic_object_filter_node",
+        output="screen",
+        parameters=[
+            {
+                "input_topic": "/points_raw",
+                "output_topic": "/points_raw_static",
+                "enabled": True,
+                "remove_min_range": 0.2,
+                "remove_max_range": 1.5,
+                "remove_min_z": 0.1,
+                "remove_max_z": 1.8,
+            }
+        ],
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument("use_initialpose_bridge", default_value="true"),
+            dynamic_object_filter_node,
             perception_container,
             imu_publisher_node,
             localizer_node,
