@@ -10,7 +10,9 @@ max_translation_jump: 0.35
 max_yaw_jump_deg: 8.0
 max_tf_translation_jump: 0.45
 max_tf_yaw_jump_deg: 8.0
-recovery_stable_count: 999
+max_hard_pose_jump: 2.5
+max_hard_yaw_jump_deg: 45.0
+recovery_stable_count: 3
 
 enable_drift_guard: false
 drift_window_sec: 5.0
@@ -19,11 +21,26 @@ max_correction_yaw_deg: 10.0
 drift_cooldown_sec: 5.0
 
 enable_velocity_guard: true
-max_robot_speed: 1.0
+max_robot_speed: 2.0
 max_robot_yaw_rate_deg: 100.0
+enable_tf_velocity_guard: true
+max_tf_correction_speed: 2.0
+max_tf_correction_yaw_rate_deg: 15.0
+enable_motion_gate: true
+max_alignment_speed: 1.6
+max_alignment_yaw_rate_deg: 120.0
+max_tf_correction_step: 0.5
+max_tf_correction_yaw_step_deg: 5.0
+max_tf_correction_accept: 1.0
+max_tf_correction_yaw_accept_deg: 12.0
 velocity_history_sec: 3.0
 velocity_recovery_age_sec: 0.7
 velocity_recovery_cooldown_sec: 2.0
+enable_pose_hold_on_lost: false
+pose_hold_reject_count: 20
+enable_auto_fresh_relocalize: true
+auto_fresh_relocalize_reject_count: 15
+auto_fresh_relocalize_cooldown_sec: 3.0
 
 fix_tf_z: true
 fixed_tf_z: 0.0

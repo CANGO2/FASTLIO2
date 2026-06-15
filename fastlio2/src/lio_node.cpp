@@ -4,6 +4,7 @@
 #include <memory>
 #include <iostream>
 #include <chrono>
+#include <cmath>
 // #include <filesystem>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -21,6 +22,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <yaml-cpp/yaml.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #ifdef FASTLIO2_COMPOSITION_BUILD
 #include <rclcpp_components/register_node_macro.hpp>
 #endif
@@ -37,6 +39,9 @@ struct NodeConfig
     bool fix_output_z = false;
     double fixed_output_z = 0.0;
     bool planar_output = false;
+    bool enable_output_guard = true;
+    double max_output_speed = 1.5;
+    double max_output_yaw_rate = 120.0 * M_PI / 180.0;
 };
 
 struct StateData
@@ -68,18 +73,20 @@ public:
             m_node_config.lidar_topic, 10,
             std::bind(&LIONode::lidarCB, this, std::placeholders::_1));
 
-        m_body_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("body_cloud", 10000);
-        m_world_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("world_cloud", 10000);
+        m_body_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("body_cloud", 10);
+        m_world_cloud_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("world_cloud", 10);
         m_global_map_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("global_map", 10);
-        m_path_pub = this->create_publisher<nav_msgs::msg::Path>("lio_path", 10000);
-        m_odom_pub = this->create_publisher<nav_msgs::msg::Odometry>("lio_odom", 10000);
+        m_path_pub = this->create_publisher<nav_msgs::msg::Path>("lio_path", 10);
+        m_odom_pub = this->create_publisher<nav_msgs::msg::Odometry>("lio_odom", 10);
+        m_reset_srv = this->create_service<std_srvs::srv::Trigger>(
+            "reset",
+            std::bind(&LIONode::resetCB, this, std::placeholders::_1, std::placeholders::_2));
         m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
 
         m_state_data.path.poses.clear();
         m_state_data.path.header.frame_id = m_node_config.world_frame;
 
-        m_kf = std::make_shared<IESKF>();
-        m_builder = std::make_shared<MapBuilder>(m_builder_config, m_kf);
+        resetEstimatorState();
         m_timer = this->create_wall_timer(20ms, std::bind(&LIONode::timerCB, this));
     }
 
@@ -105,6 +112,10 @@ public:
         m_node_config.fix_output_z = config["fix_output_z"] ? config["fix_output_z"].as<bool>() : false;
         m_node_config.fixed_output_z = config["fixed_output_z"] ? config["fixed_output_z"].as<double>() : 0.0;
         m_node_config.planar_output = config["planar_output"] ? config["planar_output"].as<bool>() : false;
+        m_node_config.enable_output_guard = config["enable_output_guard"] ? config["enable_output_guard"].as<bool>() : true;
+        m_node_config.max_output_speed = config["max_output_speed"] ? config["max_output_speed"].as<double>() : 1.5;
+        double max_output_yaw_rate_deg = config["max_output_yaw_rate_deg"] ? config["max_output_yaw_rate_deg"].as<double>() : 120.0;
+        m_node_config.max_output_yaw_rate = max_output_yaw_rate_deg * M_PI / 180.0;
         m_node_config.print_time_cost = config["print_time_cost"].as<bool>();
 
         m_builder_config.lidar_filter_num = config["lidar_filter_num"].as<int>();
@@ -236,7 +247,10 @@ public:
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub,
         std::string frame_id,
         std::string child_frame,
-        const double &time)
+        const double &time,
+        const M3D &rotation,
+        const V3D &translation,
+        const V3D &velocity_body)
     {
         if (odom_pub->get_subscription_count() <= 0)
             return;
@@ -246,20 +260,19 @@ public:
         odom.header.stamp = Utils::getTime(time);
         odom.child_frame_id = child_frame;
 
-        odom.pose.pose.position.x = m_kf->x().t_wi.x();
-        odom.pose.pose.position.y = m_kf->x().t_wi.y();
-        odom.pose.pose.position.z = outputZ(m_kf->x().t_wi.z());
+        odom.pose.pose.position.x = translation.x();
+        odom.pose.pose.position.y = translation.y();
+        odom.pose.pose.position.z = outputZ(translation.z());
 
-        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
+        Eigen::Quaterniond q = outputQuaternion(rotation);
         odom.pose.pose.orientation.x = q.x();
         odom.pose.pose.orientation.y = q.y();
         odom.pose.pose.orientation.z = q.z();
         odom.pose.pose.orientation.w = q.w();
 
-        V3D vel = m_kf->x().r_wi.transpose() * m_kf->x().v;
-        odom.twist.twist.linear.x = vel.x();
-        odom.twist.twist.linear.y = vel.y();
-        odom.twist.twist.linear.z = vel.z();
+        odom.twist.twist.linear.x = velocity_body.x();
+        odom.twist.twist.linear.y = velocity_body.y();
+        odom.twist.twist.linear.z = velocity_body.z();
 
         odom_pub->publish(odom);
     }
@@ -267,7 +280,9 @@ public:
     void publishPath(
         rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub,
         std::string frame_id,
-        const double &time)
+        const double &time,
+        const M3D &rotation,
+        const V3D &translation)
     {
         if (path_pub->get_subscription_count() <= 0)
             return;
@@ -276,11 +291,11 @@ public:
         pose.header.frame_id = frame_id;
         pose.header.stamp = Utils::getTime(time);
 
-        pose.pose.position.x = m_kf->x().t_wi.x();
-        pose.pose.position.y = m_kf->x().t_wi.y();
-        pose.pose.position.z = outputZ(m_kf->x().t_wi.z());
+        pose.pose.position.x = translation.x();
+        pose.pose.position.y = translation.y();
+        pose.pose.position.z = outputZ(translation.z());
 
-        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
+        Eigen::Quaterniond q = outputQuaternion(rotation);
         pose.pose.orientation.x = q.x();
         pose.pose.orientation.y = q.y();
         pose.pose.orientation.z = q.z();
@@ -294,15 +309,17 @@ public:
         std::shared_ptr<tf2_ros::TransformBroadcaster> broad_caster,
         std::string frame_id,
         std::string child_frame,
-        const double &time)
+        const double &time,
+        const M3D &rotation,
+        const V3D &translation)
     {
         geometry_msgs::msg::TransformStamped transformStamped;
         transformStamped.header.frame_id = frame_id;
         transformStamped.child_frame_id = child_frame;
         transformStamped.header.stamp = Utils::getTime(time);
 
-        Eigen::Quaterniond q = outputQuaternion(m_kf->x().r_wi);
-        V3D t = m_kf->x().t_wi;
+        Eigen::Quaterniond q = outputQuaternion(rotation);
+        V3D t = translation;
 
         transformStamped.transform.translation.x = t.x();
         transformStamped.transform.translation.y = t.y();
@@ -317,6 +334,7 @@ public:
 
     void timerCB()
     {
+        std::lock_guard<std::mutex> reset_lock(m_reset_mutex);
         if (!syncPackage())
             return;
 
@@ -333,17 +351,24 @@ public:
         if (m_builder->status() != BuilderStatus::MAPPING)
             return;
 
+        updateOutputState(m_package.cloud_end_time);
+
         broadCastTF(
             m_tf_broadcaster,
             m_node_config.world_frame,
             m_node_config.body_frame,
-            m_package.cloud_end_time);
+            m_package.cloud_end_time,
+            m_output_r,
+            m_output_t);
 
         publishOdometry(
             m_odom_pub,
             m_node_config.world_frame,
             m_node_config.body_frame,
-            m_package.cloud_end_time);
+            m_package.cloud_end_time,
+            m_output_r,
+            m_output_t,
+            m_output_vel_body);
 
         CloudType::Ptr body_cloud = m_builder->lidar_processor()->transformCloud(
             m_package.cloud,
@@ -384,7 +409,8 @@ public:
 
         // 진짜 누적 global map publish
         // 너무 무거우니 매 프레임이 아니라 20번에 1번만 publish
-        if ((m_global_map_pub_count++ % 20) == 0)
+        if (m_global_map_pub->get_subscription_count() > 0 &&
+            (m_global_map_pub_count++ % 20) == 0)
         {
             CloudType::Ptr global_map = m_builder->lidar_processor()->getGlobalMap();
             if (global_map && !global_map->empty())
@@ -397,13 +423,109 @@ public:
             }
         }
 
-        publishPath(
-            m_path_pub,
-            m_node_config.world_frame,
-            m_package.cloud_end_time);
+        if (m_path_pub->get_subscription_count() > 0)
+        {
+            publishPath(
+                m_path_pub,
+                m_node_config.world_frame,
+                m_package.cloud_end_time,
+                m_output_r,
+                m_output_t);
+        }
     }
 
 private:
+    void resetEstimatorState()
+    {
+        m_kf = std::make_shared<IESKF>();
+        m_builder = std::make_shared<MapBuilder>(m_builder_config, m_kf);
+        m_package = SyncPackage();
+        m_state_data.lidar_pushed = false;
+        m_state_data.last_lidar_time = -1.0;
+        m_state_data.last_imu_time = -1.0;
+        m_state_data.imu_buffer.clear();
+        m_state_data.lidar_buffer.clear();
+        m_state_data.path.poses.clear();
+        m_state_data.path.header.frame_id = m_node_config.world_frame;
+        m_global_map_pub_count = 0;
+        m_has_output_state = false;
+        m_output_r = M3D::Identity();
+        m_output_t = V3D::Zero();
+        m_output_vel_body = V3D::Zero();
+        m_last_output_stamp = 0.0;
+    }
+
+    void resetCB(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+    {
+        std::lock_guard<std::mutex> reset_lock(m_reset_mutex);
+        std::lock_guard<std::mutex> imu_lock(m_state_data.imu_mutex);
+        std::lock_guard<std::mutex> lidar_lock(m_state_data.lidar_mutex);
+        resetEstimatorState();
+        response->success = true;
+        response->message = "fastlio2 reset";
+        RCLCPP_WARN(this->get_logger(), "FASTLIO2 estimator reset requested");
+    }
+
+    void updateOutputState(double stamp)
+    {
+        M3D raw_r = outputQuaternion(m_kf->x().r_wi).toRotationMatrix();
+        V3D raw_t = m_kf->x().t_wi;
+        if (m_node_config.fix_output_z)
+            raw_t.z() = m_node_config.fixed_output_z;
+
+        if (!m_node_config.enable_output_guard || !m_has_output_state)
+        {
+            m_output_r = raw_r;
+            m_output_t = raw_t;
+            m_output_vel_body = raw_r.transpose() * m_kf->x().v;
+            m_last_output_stamp = stamp;
+            m_has_output_state = true;
+            return;
+        }
+
+        double dt = stamp - m_last_output_stamp;
+        if (dt <= 0.001)
+            dt = 0.001;
+
+        V3D delta_t = raw_t - m_output_t;
+        double max_step = m_node_config.max_output_speed * dt;
+        bool limited = false;
+        if (delta_t.norm() > max_step && delta_t.norm() > 1e-6)
+        {
+            delta_t *= max_step / delta_t.norm();
+            limited = true;
+        }
+        V3D next_t = m_output_t + delta_t;
+
+        double raw_yaw = std::atan2(raw_r(1, 0), raw_r(0, 0));
+        double last_yaw = std::atan2(m_output_r(1, 0), m_output_r(0, 0));
+        double delta_yaw = std::atan2(std::sin(raw_yaw - last_yaw), std::cos(raw_yaw - last_yaw));
+        double max_yaw_step = m_node_config.max_output_yaw_rate * dt;
+        if (std::abs(delta_yaw) > max_yaw_step)
+        {
+            delta_yaw = std::copysign(max_yaw_step, delta_yaw);
+            limited = true;
+        }
+        double next_yaw = last_yaw + delta_yaw;
+        M3D next_r = Eigen::AngleAxisd(next_yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+
+        m_output_vel_body = next_r.transpose() * (next_t - m_output_t) / dt;
+        m_output_r = next_r;
+        m_output_t = next_t;
+        m_last_output_stamp = stamp;
+
+        if (limited)
+        {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(), *this->get_clock(), 1000,
+                "Limit FASTLIO output jump: raw_speed=%.3fm/s publish_speed=%.3fm/s",
+                (raw_t - m_output_t).norm() / dt,
+                m_output_vel_body.norm());
+        }
+    }
+
     double outputZ(double z) const
     {
         return m_node_config.fix_output_z ? m_node_config.fixed_output_z : z;
@@ -431,9 +553,11 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_global_map_pub;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr m_path_pub;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_odom_pub;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr m_reset_srv;
 
     int m_global_map_pub_count = 0;
 
+    std::mutex m_reset_mutex;
     rclcpp::TimerBase::SharedPtr m_timer;
     StateData m_state_data;
     SyncPackage m_package;
@@ -442,6 +566,11 @@ private:
     std::shared_ptr<IESKF> m_kf;
     std::shared_ptr<MapBuilder> m_builder;
     std::shared_ptr<tf2_ros::TransformBroadcaster> m_tf_broadcaster;
+    bool m_has_output_state = false;
+    M3D m_output_r = M3D::Identity();
+    V3D m_output_t = V3D::Zero();
+    V3D m_output_vel_body = V3D::Zero();
+    double m_last_output_stamp = 0.0;
 };
 
 #ifndef FASTLIO2_COMPOSITION_BUILD

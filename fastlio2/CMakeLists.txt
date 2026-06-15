@@ -29,6 +29,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 # find_package(livox_ros_driver2 REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -53,7 +54,7 @@ set(SRC_LIST src/map_builder/commons.cpp
 
 add_executable(lio_node src/lio_node.cpp ${SRC_LIST})
 # ament_target_dependencies(lio_node rclcpp std_msgs tf2 tf2_ros nav_msgs sensor_msgs livox_ros_driver2 pcl_conversions geometry_msgs)
-ament_target_dependencies(lio_node rclcpp std_msgs tf2 tf2_ros nav_msgs sensor_msgs pcl_conversions geometry_msgs)
+ament_target_dependencies(lio_node rclcpp std_msgs tf2 tf2_ros nav_msgs sensor_msgs std_srvs pcl_conversions geometry_msgs)
 target_link_libraries(lio_node
   yaml-cpp
   ${PCL_LIBRARIES}
@@ -61,7 +62,7 @@ target_link_libraries(lio_node
 
 add_library(lio_node_component SHARED src/lio_node.cpp ${SRC_LIST})
 target_compile_definitions(lio_node_component PRIVATE FASTLIO2_COMPOSITION_BUILD)
-ament_target_dependencies(lio_node_component rclcpp rclcpp_components std_msgs tf2 tf2_ros nav_msgs sensor_msgs pcl_conversions geometry_msgs)
+ament_target_dependencies(lio_node_component rclcpp rclcpp_components std_msgs tf2 tf2_ros nav_msgs sensor_msgs std_srvs pcl_conversions geometry_msgs)
 target_link_libraries(lio_node_component
   yaml-cpp
   ${PCL_LIBRARIES}

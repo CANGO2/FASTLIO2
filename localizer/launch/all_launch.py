@@ -1,5 +1,7 @@
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from ament_index_python.packages import get_package_share_directory
@@ -7,6 +9,9 @@ import os
 
 
 def generate_launch_description():
+    use_rviz = LaunchConfiguration("use_rviz")
+    use_initialpose_bridge = LaunchConfiguration("use_initialpose_bridge")
+
     hesai_share = get_package_share_directory("hesai_lidar")
     fastlio_share = get_package_share_directory("fastlio2")
     localizer_share = get_package_share_directory("localizer")
@@ -99,23 +104,7 @@ def generate_launch_description():
         name="rviz2",
         output="screen",
         arguments=["-d", rviz_cfg],
-    )
-
-    load_map_cmd = TimerAction(
-        period=3.0,
-        actions=[
-            ExecuteProcess(
-                cmd=[
-                    "ros2",
-                    "service",
-                    "call",
-                    "/localizer/relocalize",
-                    "interface/srv/Relocalize",
-                    "{pcd_path: '/home/nuc/GlobalMap2.pcd', x: 0.0, y: 0.0, z: 0.0, yaw: 0.0, pitch: 0.0, roll: 0.0}",
-                ],
-                output="screen",
-            )
-        ],
+        condition=IfCondition(use_rviz),
     )
 
     bridge_cmd = TimerAction(
@@ -129,16 +118,18 @@ def generate_launch_description():
                 output="screen",
             )
         ],
+        condition=IfCondition(use_initialpose_bridge),
     )
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument("use_rviz", default_value="true"),
+            DeclareLaunchArgument("use_initialpose_bridge", default_value="true"),
             perception_container,
             imu_publisher_node,
             localizer_node,
             pose_to_navigation_node,
             rviz_node,
-            load_map_cmd,
             bridge_cmd,
         ]
     )

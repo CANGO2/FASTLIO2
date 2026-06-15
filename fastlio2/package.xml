@@ -16,6 +16,7 @@
   <depend>tf2_ros</depend>
   <depend>nav_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>pcl_conversions</depend>
   <!-- <depend>livox_ros_driver2</depend> -->
   <depend>geometry_msgs</depend>

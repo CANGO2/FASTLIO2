@@ -6,6 +6,11 @@ ICPLocalizer::ICPLocalizer(const ICPConfig &config) : m_config(config)
     m_refine_tgt.reset(new CloudType);
     m_rough_inp.reset(new CloudType);
     m_rough_tgt.reset(new CloudType);
+    m_aligned_cloud.reset(new CloudType);
+    m_rough_icp.setMaximumIterations(m_config.rough_max_iteration);
+    m_rough_icp.setMaxCorrespondenceDistance(m_config.rough_max_correspondence_distance);
+    m_refine_icp.setMaximumIterations(m_config.refine_max_iteration);
+    m_refine_icp.setMaxCorrespondenceDistance(m_config.refine_max_correspondence_distance);
 }
 bool ICPLocalizer::loadMap(const std::string &path)
 {
@@ -38,6 +43,8 @@ bool ICPLocalizer::loadMap(const std::string &path)
     {
         pcl::copyPointCloud(*cloud, *m_rough_tgt);
     }
+    m_refine_icp.setInputTarget(m_refine_tgt);
+    m_rough_icp.setInputTarget(m_rough_tgt);
     return true;
 }
 void ICPLocalizer::setInput(const CloudType::Ptr &cloud)
@@ -67,15 +74,12 @@ void ICPLocalizer::setInput(const CloudType::Ptr &cloud)
 
 bool ICPLocalizer::align(M4F &guess)
 {
-    CloudType::Ptr aligned_cloud(new CloudType);
     if (m_refine_tgt->size() == 0 || m_rough_tgt->size() == 0)
         return false;
-    m_rough_icp.setMaximumIterations(m_config.rough_max_iteration);
-    m_rough_icp.setMaxCorrespondenceDistance(m_config.rough_max_correspondence_distance);
     m_rough_icp.setInputSource(m_rough_inp);
-    m_rough_icp.setInputTarget(m_rough_tgt);
-    m_rough_icp.align(*aligned_cloud, guess);
+    m_rough_icp.align(*m_aligned_cloud, guess);
     double rough_score = m_rough_icp.getFitnessScore();
+    m_last_rough_score = rough_score;
     if (!m_rough_icp.hasConverged() || rough_score > m_config.rough_score_thresh)
     {
         // std::cerr << "Rough ICP rejected: converged=" << m_rough_icp.hasConverged()
@@ -83,12 +87,10 @@ bool ICPLocalizer::align(M4F &guess)
         //           << " thresh=" << m_config.rough_score_thresh << std::endl;
         return false;
     }
-    m_refine_icp.setMaximumIterations(m_config.refine_max_iteration);
-    m_refine_icp.setMaxCorrespondenceDistance(m_config.refine_max_correspondence_distance);
     m_refine_icp.setInputSource(m_refine_inp);
-    m_refine_icp.setInputTarget(m_refine_tgt);
-    m_refine_icp.align(*aligned_cloud, m_rough_icp.getFinalTransformation());
+    m_refine_icp.align(*m_aligned_cloud, m_rough_icp.getFinalTransformation());
     double refine_score = m_refine_icp.getFitnessScore();
+    m_last_refine_score = refine_score;
     if (!m_refine_icp.hasConverged() || refine_score > m_config.refine_score_thresh)
     {
         // std::cerr << "Refine ICP rejected: converged=" << m_refine_icp.hasConverged()

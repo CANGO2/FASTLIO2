@@ -33,10 +33,14 @@ public:
     ICPConfig &config() { return m_config; }
     CloudType::Ptr roughMap() { return m_rough_tgt; }
     CloudType::Ptr refineMap() { return m_refine_tgt; }
+    double lastRoughScore() const { return m_last_rough_score; }
+    double lastRefineScore() const { return m_last_refine_score; }
 
 
 private:
     ICPConfig m_config;
+    double m_last_rough_score = 0.0;
+    double m_last_refine_score = 0.0;
     pcl::VoxelGrid<PointType> m_voxel_filter;
     pcl::IterativeClosestPoint<PointType, PointType> m_refine_icp;
     pcl::IterativeClosestPoint<PointType, PointType> m_rough_icp;
@@ -44,5 +48,6 @@ private:
     CloudType::Ptr m_rough_inp;
     CloudType::Ptr m_refine_tgt;
     CloudType::Ptr m_rough_tgt;
+    CloudType::Ptr m_aligned_cloud;
     std::string m_pcd_path;
 };
