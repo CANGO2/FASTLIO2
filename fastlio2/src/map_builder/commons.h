@@ -52,6 +52,10 @@ struct Config
     V3D t_il = V3D::Zero();
 
     double lidar_cov_inv = 1000.0;
+    bool enable_lidar_update_guard = true;
+    int min_lidar_effective_points = 80;
+    double max_lidar_update_translation = 0.8;
+    double max_lidar_update_yaw = 15.0 * 3.14159265358979323846 / 180.0;
 };
 
 struct IMUData

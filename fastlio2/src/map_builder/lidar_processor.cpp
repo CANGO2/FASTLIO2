@@ -1,4 +1,5 @@
 #include "lidar_processor.h"
+#include <cmath>
 
 LidarProcessor::LidarProcessor(Config &config, std::shared_ptr<IESKF> kf) : m_config(config), m_kf(kf)
 {
@@ -152,12 +153,6 @@ void LidarProcessor::initCloudMap(PointVec &point_vec)
 
 void LidarProcessor::process(SyncPackage &package)
 {
-    // m_kf->setLossFunction([&](State &s, SharedState &d)
-    //                       { updateLossFunc(s, d); });
-    // m_kf->setStopFunction([&](const V21D &delta) -> bool
-    //                       { V3D rot_delta = delta.block<3, 1>(0, 0);
-    //                         V3D t_delta = delta.block<3, 1>(3, 0);
-    //                         return (rot_delta.norm() * 57.3 < 0.01) && (t_delta.norm() * 100 < 0.015); });
     if (m_config.scan_resolution > 0.0)
     {
         m_scan_filter.setInputCloud(package.cloud);
@@ -167,13 +162,56 @@ void LidarProcessor::process(SyncPackage &package)
     {
         pcl::copyPointCloud(*package.cloud, *m_cloud_down_lidar);
     }
+    const size_t cloud_size = m_cloud_down_lidar->size();
+    if (m_cloud_down_world->points.size() < cloud_size)
+    {
+        m_cloud_down_world->points.resize(cloud_size);
+        m_norm_vec->points.resize(cloud_size);
+        m_effect_cloud_lidar->points.resize(cloud_size);
+        m_effect_norm_vec->points.resize(cloud_size);
+        m_nearest_points.resize(cloud_size);
+        m_point_selected_flag.resize(cloud_size, false);
+    }
     trimCloudMap();
-    m_kf->update();
+
+    State predict_state = m_kf->x();
+    M21D predict_p = m_kf->P();
+
+    bool updated = m_kf->update();
+
+    if (m_config.enable_lidar_update_guard)
+    {
+        if (!updated)
+        {
+            m_kf->x() = predict_state;
+            m_kf->P() = predict_p;
+            std::cerr << "Skip lidar update: effective_points=" << m_last_effective_points << std::endl;
+            return;
+        }
+
+        M3D relative_r = predict_state.r_wi.transpose() * m_kf->x().r_wi;
+        double update_translation = (m_kf->x().t_wi - predict_state.t_wi).norm();
+        double update_yaw = std::abs(std::atan2(relative_r(1, 0), relative_r(0, 0)));
+        bool bad_update = update_translation > m_config.max_lidar_update_translation ||
+                          update_yaw > m_config.max_lidar_update_yaw;
+        if (bad_update)
+        {
+            m_kf->x() = predict_state;
+            m_kf->P() = predict_p;
+            std::cerr << "Reject lidar update: effective_points=" << m_last_effective_points
+                      << " update_translation=" << update_translation
+                      << " update_yaw_deg=" << update_yaw * 180.0 / 3.14159265358979323846
+                      << std::endl;
+            return;
+        }
+    }
+
     incrCloudMap();
 }
 
 void LidarProcessor::updateLossFunc(State &state, SharedState &share_data)
 {
+    m_last_effective_points = 0;
     int size = m_cloud_down_lidar->size();
 #ifdef MP_EN
     omp_set_num_threads(MP_PROC_NUM);
@@ -225,12 +263,14 @@ void LidarProcessor::updateLossFunc(State &state, SharedState &share_data)
         m_effect_norm_vec->points[effect_feat_num] = m_norm_vec->points[i];
         effect_feat_num++;
     }
-    if (effect_feat_num < 1)
+    if (effect_feat_num < m_config.min_lidar_effective_points)
     {
         share_data.valid = false;
-        std::cerr << "NO Effective Points!" << std::endl;
+        std::cerr << "Too few effective lidar points: " << effect_feat_num
+                  << " < " << m_config.min_lidar_effective_points << std::endl;
         return;
     }
+    m_last_effective_points = effect_feat_num;
     share_data.valid = true;
     share_data.H.setZero();
     share_data.b.setZero();

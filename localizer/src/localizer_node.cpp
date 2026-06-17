@@ -509,6 +509,14 @@ public:
             m_state.stable_rejected_candidate_count = 0;
             m_state.pose_hold_active = false;
             saveGoodPose(map_body_r, map_body_t, now_sec);
+            RCLCPP_INFO_THROTTLE(
+                this->get_logger(), *this->get_clock(), 1000,
+                "Global map ICP accepted: rough_score=%.4f refine_score=%.4f x=%.3f y=%.3f yaw=%.1fdeg",
+                m_localizer->lastRoughScore(),
+                m_localizer->lastRefineScore(),
+                map_body_t.x(),
+                map_body_t.y(),
+                std::atan2(map_body_r(1, 0), map_body_r(0, 0)) * 180.0 / 3.14159265358979323846);
             {
                 std::lock_guard<std::mutex> lock(m_state.service_mutex);
                 if (!m_state.localize_success && m_state.service_received)
@@ -532,12 +540,20 @@ public:
         {
             RCLCPP_WARN_THROTTLE(
                 this->get_logger(), *this->get_clock(), 1000,
-                "Relocalize ICP failed around requested pose; keep trying with the same initial guess");
+                "Relocalize ICP failed around requested pose; keep trying with the same initial guess rough_score=%.4f refine_score=%.4f",
+                m_localizer->lastRoughScore(),
+                m_localizer->lastRefineScore());
         }
         else if (m_state.has_good_pose)
         {
             double now_sec = this->get_clock()->now().seconds();
             ++m_state.rejected_alignment_count;
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(), *this->get_clock(), 1000,
+                "Global map ICP rejected: rough_score=%.4f refine_score=%.4f rejected_count=%d",
+                m_localizer->lastRoughScore(),
+                m_localizer->lastRefineScore(),
+                m_state.rejected_alignment_count);
             scheduleFreshRelocalizeIfNeeded(current_local_r, current_local_t, now_sec, using_service_guess, using_recovery_guess);
             holdLastGoodPoseIfLost(current_local_r, current_local_t);
         }

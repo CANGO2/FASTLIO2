@@ -1,59 +1,67 @@
-cloud_topic: /fastlio2/body_cloud
-odom_topic: /fastlio2/lio_odom
-map_path: /home/nuc/GlobalMap2.pcd
-map_frame: map
-local_frame: odom
-update_hz: 1.0
+# 입력/출력 및 기준 프레임 설정
+cloud_topic: /fastlio2/body_cloud        # ICP 정합에 사용할 현재 LiDAR point cloud 토픽
+odom_topic: /fastlio2/lio_odom           # FAST-LIO2 odometry 토픽. 현재 로봇 pose 예측값으로 사용
+map_path: /home/nuc/GlobalMap2.pcd       # 전역 맵 PCD 파일 경로
+map_frame: map                           # 전역 맵 기준 frame
+local_frame: odom                        # local odom frame. 이 노드가 map -> odom TF를 publish
+update_hz: 3.0                           # localizer 실행 주기 Hz
 
-enable_pose_guard: true
-max_translation_jump: 0.35
-max_yaw_jump_deg: 8.0
-max_tf_translation_jump: 0.45
-max_tf_yaw_jump_deg: 8.0
-max_hard_pose_jump: 2.5
-max_hard_yaw_jump_deg: 45.0
-recovery_stable_count: 3
+# Pose guard: ICP 결과가 직전 정상 pose에서 갑자기 튀는 경우를 감지
+enable_pose_guard: true                  # true이면 pose/TF jump 검사 활성화
+max_translation_jump: 0.8                # 예측 pose 대비 ICP 결과 위치 변화 허용값 m
+max_yaw_jump_deg: 15.0                   # 예측 pose 대비 ICP 결과 yaw 변화 허용값 deg
+max_tf_translation_jump: 0.8             # 직전 map->odom TF 대비 보정량 jump 허용값 m
+max_tf_yaw_jump_deg: 15.0                # 직전 map->odom TF 대비 yaw 보정량 jump 허용값 deg
+max_hard_pose_jump: 2.5                  # 직전 정상 pose 대비 큰 위치 jump 경고 기준 m
+max_hard_yaw_jump_deg: 45.0              # 직전 정상 pose 대비 큰 yaw jump 경고 기준 deg
+recovery_stable_count: 2                 # 큰 보정을 바로 적용하지 않고 같은 후보가 몇 번 안정적으로 나와야 받을지
 
-enable_drift_guard: false
-drift_window_sec: 5.0
-max_correction_drift: 0.4
-max_correction_yaw_deg: 10.0
-drift_cooldown_sec: 5.0
+# Drift guard: 짧은 시간 동안 누적되는 TF 보정량이 과한지 검사
+enable_drift_guard: false                # true이면 누적 drift 검사 활성화
+drift_window_sec: 5.0                    # drift 누적을 계산할 시간 창 sec
+max_correction_drift: 0.6                # 시간 창 안에서 허용할 누적 위치 보정량 m
+max_correction_yaw_deg: 15.0             # 시간 창 안에서 허용할 누적 yaw 보정량 deg
+drift_cooldown_sec: 5.0                  # drift 감지 후 재시도/회복까지 대기 시간 sec
 
-enable_velocity_guard: true
-max_robot_speed: 2.0
-max_robot_yaw_rate_deg: 100.0
-enable_tf_velocity_guard: true
-max_tf_correction_speed: 2.0
-max_tf_correction_yaw_rate_deg: 15.0
-enable_motion_gate: true
-max_alignment_speed: 1.6
-max_alignment_yaw_rate_deg: 120.0
-max_tf_correction_step: 0.5
-max_tf_correction_yaw_step_deg: 5.0
-max_tf_correction_accept: 1.0
-max_tf_correction_yaw_accept_deg: 12.0
-velocity_history_sec: 3.0
-velocity_recovery_age_sec: 0.7
-velocity_recovery_cooldown_sec: 2.0
-enable_pose_hold_on_lost: false
-pose_hold_reject_count: 20
-enable_auto_fresh_relocalize: true
-auto_fresh_relocalize_reject_count: 15
-auto_fresh_relocalize_cooldown_sec: 3.0
+# Velocity guard: 로봇 움직임 또는 TF 보정 속도가 비현실적으로 큰지 검사
+enable_velocity_guard: true              # true이면 ICP pose 변화 속도 검사 활성화
+max_robot_speed: 2.0                     # ICP pose 기준 허용 로봇 선속도 m/s
+max_robot_yaw_rate_deg: 100.0            # ICP pose 기준 허용 로봇 yaw rate deg/s
+enable_tf_velocity_guard: true           # true이면 map->odom TF 보정 속도 검사 활성화
+max_tf_correction_speed: 2.0             # TF 위치 보정 속도 허용값 m/s
+max_tf_correction_yaw_rate_deg: 20.0     # TF yaw 보정 속도 허용값 deg/s
+enable_motion_gate: false                # true이면 로봇이 빠르게 움직일 때 정합 적용을 제한
+max_alignment_speed: 1.6                 # motion gate에서 허용할 로봇 선속도 m/s
+max_alignment_yaw_rate_deg: 120.0        # motion gate에서 허용할 yaw rate deg/s
+max_tf_correction_step: 0.5              # 큰 TF 보정을 한 번에 적용할 최대 위치 step m
+max_tf_correction_yaw_step_deg: 5.0      # 큰 TF 보정을 한 번에 적용할 최대 yaw step deg
+max_tf_correction_accept: 1.5            # 이보다 큰 TF 위치 보정 후보는 의심값으로 reject m
+max_tf_correction_yaw_accept_deg: 20.0   # 이보다 큰 TF yaw 보정 후보는 의심값으로 reject deg
+velocity_history_sec: 3.0                # 속도/회복 판단에 보관할 정상 pose history 길이 sec
+velocity_recovery_age_sec: 0.7           # 속도 이상 시 이 시간 전 정상 pose를 recovery initial guess로 사용 sec
+velocity_recovery_cooldown_sec: 2.0      # velocity recovery 재시도 간격 sec
+enable_pose_hold_on_lost: false          # true이면 연속 reject 시 마지막 정상 pose를 유지
+pose_hold_reject_count: 20               # pose hold를 시작할 연속 reject 횟수
+enable_auto_fresh_relocalize: false      # true이면 연속 실패 시 fresh relocalize 자동 시도
+auto_fresh_relocalize_reject_count: 15   # fresh relocalize를 트리거할 연속 reject 횟수
+auto_fresh_relocalize_cooldown_sec: 5.0  # fresh relocalize 자동 시도 간격 sec
 
-fix_tf_z: true
-fixed_tf_z: 0.0
-fix_robot_z: true
-fixed_robot_z: 0.0
+# Z축 고정 옵션: 2D 주행 환경에서 TF 또는 robot 높이가 튀지 않도록 제한
+fix_tf_z: false                          # true이면 publish하는 map->odom TF의 z를 고정
+fixed_tf_z: 0.0                          # fix_tf_z 사용 시 TF z 값
+fix_robot_z: true                        # true이면 로봇 body 기준 z가 fixed_robot_z가 되도록 TF z 보정
+fixed_robot_z: 0.0                       # fix_robot_z 사용 시 로봇 z 목표값
 
-rough_scan_resolution: 0.4
-rough_map_resolution: 0.3
-rough_max_iteration: 3
-rough_score_thresh: 0.15
-rough_max_correspondence_distance: 1.5
-refine_scan_resolution: 0.2
-refine_map_resolution: 0.15
-refine_max_iteration: 3
-refine_score_thresh: 0.07
-refine_max_correspondence_distance: 0.7
+# ICP rough stage: 거친 해상도로 빠르게 전역 맵과 대략 정합
+rough_scan_resolution: 0.4               # rough 단계에서 입력 scan voxel 크기 m
+rough_map_resolution: 0.3                # rough 단계에서 map voxel 크기 m
+rough_max_iteration: 30                  # rough ICP 최대 반복 횟수
+rough_score_thresh: 0.45                 # rough ICP fitness score 허용 기준. 낮을수록 정합이 좋음
+rough_max_correspondence_distance: 3.5   # rough ICP 대응점 최대 거리 m
+
+# ICP refine stage: rough 결과를 시작점으로 더 촘촘하게 최종 정합
+refine_scan_resolution: 0.2              # refine 단계에서 입력 scan voxel 크기 m
+refine_map_resolution: 0.15              # refine 단계에서 map voxel 크기 m
+refine_max_iteration: 20                 # refine ICP 최대 반복 횟수
+refine_score_thresh: 0.15                # refine ICP fitness score 허용 기준. 낮을수록 정합이 좋음
+refine_max_correspondence_distance: 1.0  # refine ICP 대응점 최대 거리 m

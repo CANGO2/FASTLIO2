@@ -1,5 +1,5 @@
 imu_topic: /go2/imu
-lidar_topic: /points_raw_static
+lidar_topic: /points_raw
 body_frame: base_link
 world_frame: odom  # map
 print_time_cost: false
@@ -11,23 +11,27 @@ enable_output_guard: true
 max_output_speed: 1.5
 max_output_yaw_rate_deg: 120.0
 
-lidar_filter_num: 6
+lidar_filter_num: 4
 lidar_min_range: 0.5
 lidar_max_range: 15.0
-scan_resolution: 0.15
-map_resolution: 0.3
-cube_len: 300
-det_range: 60
+scan_resolution: 0.10
+map_resolution: 0.2
+cube_len: 100
+det_range: 20
 move_thresh: 1.5
 na: 0.01
 ng: 0.01
 nba: 0.0001
 nbg: 0.0001
-imu_init_num: 30
-near_search_num: 5
-ieskf_max_iter: 5
+imu_init_num: 300
+near_search_num: 8
+ieskf_max_iter: 6
 gravity_align: false
 esti_il: false
 r_il: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0] 
-t_il: [0.1710, 0.0, 0.1508]
-lidar_cov_inv: 1000.0
+t_il: [0.1710, 0.0, 0.1408]
+lidar_cov_inv: 300.0
+enable_lidar_update_guard: true
+min_lidar_effective_points: 80
+max_lidar_update_translation: 1.2
+max_lidar_update_yaw_deg: 20.0

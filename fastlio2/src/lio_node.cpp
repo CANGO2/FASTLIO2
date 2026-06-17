@@ -136,6 +136,11 @@ public:
         m_builder_config.ieskf_max_iter = config["ieskf_max_iter"].as<int>();
         m_builder_config.gravity_align = config["gravity_align"].as<bool>();
         m_builder_config.esti_il = config["esti_il"].as<bool>();
+        m_builder_config.enable_lidar_update_guard = config["enable_lidar_update_guard"] ? config["enable_lidar_update_guard"].as<bool>() : true;
+        m_builder_config.min_lidar_effective_points = config["min_lidar_effective_points"] ? config["min_lidar_effective_points"].as<int>() : 80;
+        m_builder_config.max_lidar_update_translation = config["max_lidar_update_translation"] ? config["max_lidar_update_translation"].as<double>() : 0.8;
+        double max_lidar_update_yaw_deg = config["max_lidar_update_yaw_deg"] ? config["max_lidar_update_yaw_deg"].as<double>() : 15.0;
+        m_builder_config.max_lidar_update_yaw = max_lidar_update_yaw_deg * M_PI / 180.0;
 
         std::vector<double> t_il_vec = config["t_il"].as<std::vector<double>>();
         std::vector<double> r_il_vec = config["r_il"].as<std::vector<double>>();

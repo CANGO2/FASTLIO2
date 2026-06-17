@@ -75,7 +75,7 @@ void IESKF::predict(const Input &inp, double dt, const M12D &Q)
     m_P = m_F * m_P * m_F.transpose() + m_G * Q * m_G.transpose();
 }
 
-void IESKF::update()
+bool IESKF::update()
 {
     State predict_x = m_x;
     SharedState shared_data;
@@ -84,12 +84,14 @@ void IESKF::update()
     V21D delta = V21D::Zero();
     M21D H = M21D::Identity();
     V21D b;
+    bool has_valid_update = false;
 
     for (size_t i = 0; i < m_max_iter; i++)
     {
         m_loss_func(m_x, shared_data);
         if (!shared_data.valid)
             break;
+        has_valid_update = true;
         H.setZero();
         b.setZero();
         delta = m_x - predict_x;
@@ -111,10 +113,17 @@ void IESKF::update()
             break;
     }
 
+    if (!has_valid_update)
+    {
+        m_x = predict_x;
+        return false;
+    }
+
     M21D L = M21D::Identity();
     // L.block<3, 3>(0, 0) = JrInv(delta.segment<3>(0));
     // L.block<3, 3>(6, 6) = JrInv(delta.segment<3>(6));
     L.block<3, 3>(0, 0) = Jr(delta.segment<3>(0));
     L.block<3, 3>(6, 6) = Jr(delta.segment<3>(6));
     m_P = L * H.inverse() * L.transpose();
+    return true;
 }

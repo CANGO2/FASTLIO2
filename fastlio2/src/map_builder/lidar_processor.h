@@ -47,4 +47,5 @@ private:
     CloudType::Ptr m_effect_norm_vec;
     std::vector<PointVec> m_nearest_points;
     pcl::VoxelGrid<PointType> m_scan_filter;
+    int m_last_effective_points = 0;
 };
